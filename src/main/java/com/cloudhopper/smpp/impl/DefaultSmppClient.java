@@ -48,8 +48,12 @@ import com.cloudhopper.smpp.type.SmppChannelConnectTimeoutException;
 import com.cloudhopper.smpp.type.UnrecoverablePduException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLEngine;
+
+import com.cloudhopper.smpp.util.DefaultThreadFactory;
 import org.jboss.netty.bootstrap.ClientBootstrap;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
@@ -57,6 +61,8 @@ import org.jboss.netty.channel.group.ChannelGroup;
 import org.jboss.netty.channel.group.DefaultChannelGroup;
 import org.jboss.netty.channel.socket.ClientSocketChannelFactory;
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory;
+import org.jboss.netty.handler.execution.ExecutionHandler;
+import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
 import org.jboss.netty.handler.ssl.SslHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +74,15 @@ import org.slf4j.LoggerFactory;
  */
 public class DefaultSmppClient implements SmppClient {
     private static final Logger logger = LoggerFactory.getLogger(DefaultSmppClient.class);
+
+    private static final OrderedMemoryAwareThreadPoolExecutor UPSTREAM_EXECUTOR = new OrderedMemoryAwareThreadPoolExecutor(
+            24,
+            0,
+            0,
+            30,
+            TimeUnit.MINUTES,
+            new DefaultThreadFactory("ch-client-upstream-executor")
+    );
 
     private ChannelGroup channels;
     private SmppClientConnector clientConnector;
@@ -137,6 +152,15 @@ public class DefaultSmppClient implements SmppClient {
         this.clientBootstrap = new ClientBootstrap(channelFactory);
         // we use the same default pipeline for all new channels - no need for a factory
         this.clientConnector = new SmppClientConnector(this.channels);
+
+        this.clientBootstrap.setOption("writeBufferHighWaterMark", 10 * 64 * 1024);
+        this.clientBootstrap.setOption("sendBufferSize", 1048576);
+        this.clientBootstrap.setOption("receiveBufferSize", 1048576);
+        this.clientBootstrap.setOption("tcpNoDelay", true);
+
+
+        this.clientBootstrap.getPipeline().addLast("ch-client-upstream-executor-handler", new ExecutionHandler(UPSTREAM_EXECUTOR));
+
         this.clientBootstrap.getPipeline().addLast(SmppChannelConstants.PIPELINE_CLIENT_CONNECTOR_NAME, this.clientConnector);
         this.monitorExecutor = monitorExecutor;
     }

@@ -47,8 +47,11 @@ import java.util.Timer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.management.ObjectName;
+
+import com.cloudhopper.smpp.util.DefaultThreadFactory;
 import org.jboss.netty.bootstrap.ServerBootstrap;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelException;
@@ -57,6 +60,8 @@ import org.jboss.netty.channel.group.ChannelGroup;
 import org.jboss.netty.channel.group.DefaultChannelGroup;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.jboss.netty.channel.socket.oio.OioServerSocketChannelFactory;
+import org.jboss.netty.handler.execution.ExecutionHandler;
+import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +72,15 @@ import org.slf4j.LoggerFactory;
  */
 public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
     private static final Logger logger = LoggerFactory.getLogger(DefaultSmppServer.class);
+    private static final OrderedMemoryAwareThreadPoolExecutor UPSTREAM_EXECUTOR = new OrderedMemoryAwareThreadPoolExecutor(
+            24,
+            0,
+            0,
+            30,
+            TimeUnit.MINUTES,
+            new DefaultThreadFactory("ch-server-upstream-executor")
+    );
+
 
     private final ChannelGroup channels;
     private final SmppServerConnector serverConnector;
@@ -145,9 +159,17 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
         
         // set options for the server socket that are useful
         this.serverBootstrap.setOption("reuseAddress", configuration.isReuseAddress());
-        
+
+        this.serverBootstrap.setOption("writeBufferHighWaterMark", 10 * 64 * 1024);
+        this.serverBootstrap.setOption("sendBufferSize", 1048576);
+        this.serverBootstrap.setOption("receiveBufferSize", 1048576);
+        this.serverBootstrap.setOption("tcpNoDelay", true);
+
         // we use the same default pipeline for all new channels - no need for a factory
         this.serverConnector = new SmppServerConnector(channels, this);
+
+        this.serverBootstrap.getPipeline().addLast("ch-server-upstream-executor-handler", new ExecutionHandler(UPSTREAM_EXECUTOR));
+
         this.serverBootstrap.getPipeline().addLast(SmppChannelConstants.PIPELINE_SERVER_CONNECTOR_NAME, this.serverConnector);
         // a shared timer used to make sure new channels are bound within X milliseconds
         this.bindTimer = new Timer(configuration.getName() + "-BindTimer0", true);

@@ -23,7 +23,6 @@ package com.cloudhopper.smpp.channel;
 
 import org.jboss.netty.channel.ChannelEvent;
 import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipelineCoverage;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 
 /**
@@ -34,7 +33,6 @@ import org.jboss.netty.channel.ChannelUpstreamHandler;
  *
  * @author joelauer (twitter: @jjlauer or <a href="http://twitter.com/jjlauer" target=window>http://twitter.com/jjlauer</a>)
  */
-@ChannelPipelineCoverage("one")
 public class SmppSessionThreadRenamer implements ChannelUpstreamHandler {
 
     private String threadName;

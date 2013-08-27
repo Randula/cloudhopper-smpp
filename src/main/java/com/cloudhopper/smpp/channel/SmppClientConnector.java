@@ -21,7 +21,6 @@ package com.cloudhopper.smpp.channel;
  */
 
 import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipelineCoverage;
 import org.jboss.netty.channel.ChannelStateEvent;
 import org.jboss.netty.channel.ExceptionEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
@@ -39,7 +38,6 @@ import org.slf4j.LoggerFactory;
  *
  * @author joelauer (twitter: @jjlauer or <a href="http://twitter.com/jjlauer" target=window>http://twitter.com/jjlauer</a>)
  */
-@ChannelPipelineCoverage("all")
 public class SmppClientConnector extends SimpleChannelUpstreamHandler {
     private static final Logger logger = LoggerFactory.getLogger(SmppClientConnector.class);
 
