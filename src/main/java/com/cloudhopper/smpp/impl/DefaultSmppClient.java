@@ -31,9 +31,7 @@ import com.cloudhopper.smpp.channel.SmppChannelConstants;
 import com.cloudhopper.smpp.type.SmppTimeoutException;
 import com.cloudhopper.smpp.channel.SmppClientConnector;
 import com.cloudhopper.smpp.channel.SmppSessionPduDecoder;
-import com.cloudhopper.smpp.channel.SmppSessionLogger;
 import com.cloudhopper.smpp.channel.SmppSessionWrapper;
-import com.cloudhopper.smpp.channel.SmppSessionThreadRenamer;
 import com.cloudhopper.smpp.pdu.BaseBind;
 import com.cloudhopper.smpp.pdu.BaseBindResp;
 import com.cloudhopper.smpp.pdu.BindReceiver;
@@ -258,17 +256,6 @@ public class DefaultSmppClient implements SmppClient {
 		throw new SmppChannelConnectException("Unable to create SSL session]: " + e.getMessage(), e);
 	    }
 	}
-
-        // add the thread renamer portion to the pipeline
-        if (config.getName() != null) {
-            channel.getPipeline().addLast(SmppChannelConstants.PIPELINE_SESSION_THREAD_RENAMER_NAME, new SmppSessionThreadRenamer(config.getName()));
-        } else {
-            logger.warn("Session configuration did not have a name set - skipping threadRenamer in pipeline");
-        }
-
-        // create the logging handler (for bytes sent/received on wire)
-        SmppSessionLogger loggingHandler = new SmppSessionLogger(DefaultSmppSession.class.getCanonicalName(), config.getLoggingOptions());
-        channel.getPipeline().addLast(SmppChannelConstants.PIPELINE_SESSION_LOGGER_NAME, loggingHandler);
 
         // add a new instance of a decoder (that takes care of handling frames)
         channel.getPipeline().addLast(SmppChannelConstants.PIPELINE_SESSION_PDU_DECODER_NAME, new SmppSessionPduDecoder(session.getTranscoder()));

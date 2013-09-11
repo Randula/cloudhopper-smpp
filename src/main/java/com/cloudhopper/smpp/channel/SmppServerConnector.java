@@ -82,9 +82,7 @@ public class SmppServerConnector extends SimpleChannelUpstreamHandler {
 	    channel.getPipeline().addLast(SmppChannelConstants.PIPELINE_SESSION_SSL_NAME, new SslHandler(sslEngine));
 	}
 
-        // add a new instance of a thread renamer
-        channel.getPipeline().addLast(SmppChannelConstants.PIPELINE_SESSION_THREAD_RENAMER_NAME, new SmppSessionThreadRenamer(threadName));
-        
+
         // add a new instance of a decoder (that takes care of handling frames)
         channel.getPipeline().addLast(SmppChannelConstants.PIPELINE_SESSION_PDU_DECODER_NAME, new SmppSessionPduDecoder(server.getTranscoder()));
 
