@@ -53,12 +53,15 @@ import javax.net.ssl.SSLEngine;
 
 import com.cloudhopper.smpp.util.DefaultThreadFactory;
 import org.jboss.netty.bootstrap.ClientBootstrap;
+import org.jboss.netty.bootstrap.ServerBootstrap;
+import org.jboss.netty.channel.AdaptiveReceiveBufferSizePredictorFactory;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.group.ChannelGroup;
 import org.jboss.netty.channel.group.DefaultChannelGroup;
 import org.jboss.netty.channel.socket.ClientSocketChannelFactory;
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory;
+import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.jboss.netty.handler.execution.ExecutionHandler;
 import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
 import org.jboss.netty.handler.ssl.SslHandler;
@@ -74,7 +77,7 @@ public class DefaultSmppClient implements SmppClient {
     private static final Logger logger = LoggerFactory.getLogger(DefaultSmppClient.class);
 
     private static final OrderedMemoryAwareThreadPoolExecutor UPSTREAM_EXECUTOR = new OrderedMemoryAwareThreadPoolExecutor(
-            24,
+            32,
             0,
             0,
             30,
@@ -84,7 +87,6 @@ public class DefaultSmppClient implements SmppClient {
 
     private ChannelGroup channels;
     private SmppClientConnector clientConnector;
-    private ExecutorService executors;
     private ClientSocketChannelFactory channelFactory;
     private ClientBootstrap clientBootstrap;
     private ScheduledExecutorService monitorExecutor;
@@ -145,15 +147,23 @@ public class DefaultSmppClient implements SmppClient {
      */
     public DefaultSmppClient(ExecutorService executors, int expectedSessions, ScheduledExecutorService monitorExecutor) {
         this.channels = new DefaultChannelGroup();
-        this.executors = executors;
-        this.channelFactory = new NioClientSocketChannelFactory(this.executors, this.executors, expectedSessions);
+
+        this.channelFactory = new NioClientSocketChannelFactory(
+                Executors.newCachedThreadPool(new DefaultThreadFactory("netty-io-client-boss-pool")),
+                Executors.newCachedThreadPool(new DefaultThreadFactory("netty-io-client-worker-pool")),
+                expectedSessions
+        );
+
         this.clientBootstrap = new ClientBootstrap(channelFactory);
         // we use the same default pipeline for all new channels - no need for a factory
         this.clientConnector = new SmppClientConnector(this.channels);
 
-        this.clientBootstrap.setOption("writeBufferHighWaterMark", 10 * 64 * 1024);
-        this.clientBootstrap.setOption("sendBufferSize", 1048576);
-        this.clientBootstrap.setOption("receiveBufferSize", 1048576);
+        this.clientBootstrap.setOption("sendBufferSize", 16777216);
+        this.clientBootstrap.setOption("receiveBufferSize", 16777216);
+
+        this.clientBootstrap.setOption("writeBufferLowWaterMark", 20000 * 256);
+        this.clientBootstrap.setOption("writeBufferHighWaterMark", 30000 * 256);
+
         this.clientBootstrap.setOption("tcpNoDelay", true);
 
 

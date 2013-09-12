@@ -51,6 +51,7 @@ import javax.management.ObjectName;
 
 import com.cloudhopper.smpp.util.DefaultThreadFactory;
 import org.jboss.netty.bootstrap.ServerBootstrap;
+import org.jboss.netty.channel.AdaptiveReceiveBufferSizePredictorFactory;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelException;
 import org.jboss.netty.channel.ChannelFactory;
@@ -71,7 +72,7 @@ import org.slf4j.LoggerFactory;
 public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
     private static final Logger logger = LoggerFactory.getLogger(DefaultSmppServer.class);
     private static final OrderedMemoryAwareThreadPoolExecutor UPSTREAM_EXECUTOR = new OrderedMemoryAwareThreadPoolExecutor(
-            24,
+            32,
             0,
             0,
             30,
@@ -85,7 +86,6 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
     private final SmppServerConfiguration configuration;
     private final SmppServerHandler serverHandler;
     private final PduTranscoder transcoder;
-    private ExecutorService bossThreadPool;
     private ChannelFactory channelFactory;
     private ServerBootstrap serverBootstrap;
     private Channel serverChannel;
@@ -121,7 +121,7 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
      *      sockets are used.
      */
     public DefaultSmppServer(final SmppServerConfiguration configuration, SmppServerHandler serverHandler, ExecutorService executor) {
-        this(configuration, serverHandler, DaemonExecutors.newCachedDaemonThreadPool(), null);
+        this(configuration, serverHandler, null);
     }
 
     /**
@@ -129,7 +129,6 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
      * @param configuration The server configuration to create this server with
      * @param serverHandler The handler implementation for handling bind requests
      *      and creating/destroying sessions.
-     * @param executor The executor that IO workers will be executed with. An
      *      Executors.newCachedDaemonThreadPool() is recommended. The max threads
      *      will never grow more than configuration.getMaxConnections() if NIO
      *      sockets are used.
@@ -137,30 +136,30 @@ public class DefaultSmppServer implements SmppServer, DefaultSmppServerMXBean {
      *      to monitor themselves and expire requests. If null monitoring will
      *      be disabled.
      */
-    public DefaultSmppServer(final SmppServerConfiguration configuration, SmppServerHandler serverHandler, ExecutorService executor, ScheduledExecutorService monitorExecutor) {
+    public DefaultSmppServer(final SmppServerConfiguration configuration, SmppServerHandler serverHandler, ScheduledExecutorService monitorExecutor) {
         this.configuration = configuration;
         // the same group we'll put every server channel
         this.channels = new DefaultChannelGroup();
         this.serverHandler = serverHandler;
-        // we'll put the "boss" worker for a server in its own pool
-        this.bossThreadPool = Executors.newCachedThreadPool();
-        
-        // a factory for creating channels (connections)
-        if (configuration.isNonBlockingSocketsEnabled()) {
-            this.channelFactory = new NioServerSocketChannelFactory(this.bossThreadPool, executor, configuration.getMaxConnectionSize());
-        } else {
-            this.channelFactory = new OioServerSocketChannelFactory(this.bossThreadPool, executor);
-        }
-        
+
+        this.channelFactory = new NioServerSocketChannelFactory(
+                Executors.newCachedThreadPool(new DefaultThreadFactory("netty-io-server-boss-pool")),
+                Executors.newCachedThreadPool(new DefaultThreadFactory("netty-io-server-worker-pool")),
+                configuration.getMaxConnectionSize()
+        );
+
         // tie the server bootstrap to this server socket channel factory
         this.serverBootstrap = new ServerBootstrap(this.channelFactory);
         
         // set options for the server socket that are useful
         this.serverBootstrap.setOption("reuseAddress", configuration.isReuseAddress());
 
-        this.serverBootstrap.setOption("writeBufferHighWaterMark", 10 * 64 * 1024);
-        this.serverBootstrap.setOption("sendBufferSize", 1048576);
-        this.serverBootstrap.setOption("receiveBufferSize", 1048576);
+        this.serverBootstrap.setOption("sendBufferSize", 16777216);
+        this.serverBootstrap.setOption("receiveBufferSize", 16777216);
+
+        this.serverBootstrap.setOption("writeBufferLowWaterMark", 20000 * 256);
+        this.serverBootstrap.setOption("writeBufferHighWaterMark", 30000 * 256);
+
         this.serverBootstrap.setOption("tcpNoDelay", true);
 
         // we use the same default pipeline for all new channels - no need for a factory
